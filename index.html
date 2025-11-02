@@ -481,6 +481,10 @@ class Frac {
     const approx = Math.round(sqrtVal * precision);
     return new Frac(approx, precision);
   }
+  
+  equals(f) {
+    return this.n === f.n && this.d === f.d;
+  }
 }
 
 let N = 2;
@@ -637,6 +641,176 @@ function computeEigenvalues2x2(A){
   return [lambda1, lambda2];
 }
 
+function computeDeterminant3x3(M) {
+  // det(M) = a(ei - fh) - b(di - fg) + c(dh - eg)
+  const a = M[0][0], b = M[0][1], c = M[0][2];
+  const d = M[1][0], e = M[1][1], f = M[1][2];
+  const g = M[2][0], h = M[2][1], i = M[2][2];
+  
+  const term1 = a.mul(e.mul(i).sub(f.mul(h)));
+  const term2 = b.mul(d.mul(i).sub(f.mul(g)));
+  const term3 = c.mul(d.mul(h).sub(e.mul(g)));
+  
+  return term1.sub(term2).add(term3);
+}
+
+function computeEigenvalues3x3(A){
+  clearLog();
+  log('<strong class="log-step">═══════════════════════════════════════</strong>');
+  log('<strong class="log-step">STEP 1: EIGENVALUE COMPUTATION (3×3)</strong>');
+  log('<strong class="log-step">═══════════════════════════════════════</strong>');
+  
+  log('');
+  log('<strong>Input Matrix A:</strong>');
+  log(matrixToString(A));
+  
+  log('');
+  log('<strong>Theoretical Foundation:</strong>');
+  log('For 3×3 matrices, the characteristic equation det(A - λI) = 0 yields a cubic:');
+  log('-λ³ + c₂λ² + c₁λ + c₀ = 0');
+  
+  log('');
+  log('<strong>Step 1.1: Compute Characteristic Polynomial Coefficients</strong>');
+  
+  // Compute trace
+  const trace = A[0][0].add(A[1][1]).add(A[2][2]);
+  log(`Trace(A) = ${A[0][0]} + ${A[1][1]} + ${A[2][2]} = ${trace}`);
+  
+  // Compute determinant
+  const det = computeDeterminant3x3(A);
+  log(`det(A) = ${det}`);
+  
+  // For cubic: -λ³ + trace·λ² + ... + (-1)³·det = 0
+  // We'll use numerical approximation combined with rational root theorem
+  
+  log('');
+  log('<strong>Step 1.2: Search for Rational Eigenvalues</strong>');
+  log('Testing potential rational roots using the Rational Root Theorem...');
+  
+  // Try to find rational eigenvalues
+  const candidateEigenvalues = [];
+  const detFloat = det.toFloat();
+  const traceFloat = trace.toFloat();
+  
+  // Generate candidates from factors of det and leading coefficient
+  const candidates = [];
+  const maxTest = 20;
+  for (let i = -maxTest; i <= maxTest; i++) {
+    if (i !== 0) candidates.push(new Frac(i));
+    candidates.push(new Frac(i, 2));
+    candidates.push(new Frac(i, 3));
+    candidates.push(new Frac(i, 4));
+  }
+  
+  // Test each candidate
+  for (const lambda of candidates) {
+    // Create A - λI
+    const M = A.map((row, i) => row.map((val, j) => 
+      i === j ? val.sub(lambda) : val
+    ));
+    
+    // Check if det(A - λI) = 0
+    const detM = computeDeterminant3x3(M);
+    if (detM.isZero()) {
+      // Found an eigenvalue!
+      let isDuplicate = false;
+      for (const existing of candidateEigenvalues) {
+        if (existing.equals(lambda)) {
+          isDuplicate = true;
+          break;
+        }
+      }
+      if (!isDuplicate) {
+        candidateEigenvalues.push(lambda);
+        log(`✓ Found eigenvalue: λ = ${lambda}`);
+      }
+    }
+  }
+  
+  if (candidateEigenvalues.length === 0) {
+    log('');
+    log('⚠️ No simple rational eigenvalues found.');
+    log('The eigenvalues may be irrational or complex.');
+    log('');
+    log('<strong>Recommendation:</strong>');
+    log('• Use matrices with integer eigenvalues for exact computation');
+    log('• Try diagonal or triangular matrices');
+    log('• Use preset matrices for learning');
+    return [];
+  }
+  
+  // If we found some eigenvalues, try to find the remaining ones
+  if (candidateEigenvalues.length < 3) {
+    log('');
+    log(`Found ${candidateEigenvalues.length} eigenvalue(s). Searching for remaining...`);
+    
+    // For educational purposes, if we can't find all 3, we'll work with what we have
+    if (candidateEigenvalues.length === 1) {
+      log('⚠️ Could not find all eigenvalues. Working with the one found.');
+    } else if (candidateEigenvalues.length === 2) {
+      log('⚠️ Could not find all eigenvalues. Working with the two found.');
+    }
+  }
+  
+  log('');
+  log('<strong class="log-step">═══ EIGENVALUES FOUND ═══</strong>');
+  candidateEigenvalues.forEach((lambda, i) => {
+    log(`<strong class="log-eigen">λ${i+1} = ${lambda}</strong>`);
+  });
+  
+  return candidateEigenvalues;
+}
+
+function rowReduce(M) {
+  // Create a copy to work with
+  const n = M.length;
+  const m = M[0].length;
+  const result = M.map(row => [...row]);
+  
+  let lead = 0;
+  for (let r = 0; r < n; r++) {
+    if (lead >= m) break;
+    
+    // Find pivot
+    let i = r;
+    while (result[i][lead].isZero()) {
+      i++;
+      if (i === n) {
+        i = r;
+        lead++;
+        if (lead === m) return result;
+      }
+    }
+    
+    // Swap rows
+    if (i !== r) {
+      [result[i], result[r]] = [result[r], result[i]];
+    }
+    
+    // Scale pivot row
+    const pivot = result[r][lead];
+    if (!pivot.isZero()) {
+      for (let j = 0; j < m; j++) {
+        result[r][j] = result[r][j].div(pivot);
+      }
+    }
+    
+    // Eliminate column
+    for (let i = 0; i < n; i++) {
+      if (i !== r && !result[i][lead].isZero()) {
+        const factor = result[i][lead];
+        for (let j = 0; j < m; j++) {
+          result[i][j] = result[i][j].sub(factor.mul(result[r][j]));
+        }
+      }
+    }
+    
+    lead++;
+  }
+  
+  return result;
+}
+
 function computeEigenvector(A, lambda, index){
   log('');
   log('<div class="log-section"></div>');
@@ -698,28 +872,80 @@ function computeEigenvector(A, lambda, index){
     log('');
     log('For 3×3 system, performing Gaussian elimination:');
     
-    // Simple row reduction approach
-    let found = false;
-    for (let r=0; r<3; r++){
-      for (let c=0; c<3; c++){
-        if (!M[r][c].isZero()){
-          log(`Row ${r+1} has pivot in column ${c+1}`);
-          found = true;
+    // Perform row reduction
+    const reduced = rowReduce(M);
+    
+    log('');
+    log('<strong>Row-reduced form:</strong>');
+    log(matrixToString(reduced));
+    
+    log('');
+    log('<strong>Step 3: Identify Free Variables and Construct Solution</strong>');
+    
+    // Find pivot columns
+    const pivotCols = [];
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        if (!reduced[r][c].isZero() && !pivotCols.includes(c)) {
+          pivotCols.push(c);
           break;
         }
       }
-      if (found) break;
+    }
+    
+    // Find free variables
+    const freeVars = [];
+    for (let c = 0; c < 3; c++) {
+      if (!pivotCols.includes(c)) {
+        freeVars.push(c);
+      }
+    }
+    
+    log(`Pivot columns: ${pivotCols.map(c => c+1).join(', ')}`);
+    log(`Free variable(s): ${freeVars.map(c => `x${c+1}`).join(', ')}`);
+    
+    // Construct eigenvector based on free variables
+    const v = [new Frac(0), new Frac(0), new Frac(0)];
+    
+    if (freeVars.length > 0) {
+      // Set first free variable to 1
+      v[freeVars[0]] = new Frac(1);
+      
+      // Back-substitute to find other components
+      for (let r = 2; r >= 0; r--) {
+        let pivotCol = -1;
+        for (let c = 0; c < 3; c++) {
+          if (!reduced[r][c].isZero()) {
+            pivotCol = c;
+            break;
+          }
+        }
+        
+        if (pivotCol !== -1 && pivotCol !== freeVars[0]) {
+          let sum = new Frac(0);
+          for (let c = pivotCol + 1; c < 3; c++) {
+            sum = sum.add(reduced[r][c].mul(v[c]));
+          }
+          v[pivotCol] = sum.neg();
+        }
+      }
+      
+      log('');
+      log('Setting free variable to 1 and back-substituting:');
+      log(`x${freeVars[0]+1} = 1 (free variable)`);
+      
+    } else {
+      // All variables are pivot variables (shouldn't happen for eigenspace)
+      // Use a simple solution
+      v[0] = new Frac(1);
+      v[1] = new Frac(1);
+      v[2] = new Frac(1);
     }
     
     log('');
-    log('Identifying free variables and constructing eigenvector...');
-    log('(Detailed row reduction omitted for brevity in 3×3 case)');
+    log(`<strong class="log-vector">Eigenvector v${index} = [${v[0]}, ${v[1]}, ${v[2]}]</strong>`);
     
-    log('');
-    log('<strong class="log-vector">Eigenvector v' + index + ' = [1, 1, 1]</strong>');
-    log('(Simplified eigenvector for demonstration)');
-    
-    return [new Frac(1), new Frac(1), new Frac(1)];
+    return v;
   }
 }
 
@@ -734,26 +960,16 @@ function findEigenvalues(){
   
   if (N === 2){
     eigenvalues = computeEigenvalues2x2(A);
-  } else {
-    clearLog();
-    log('<strong class="log-step">═══════════════════════════════════════</strong>');
-    log('<strong class="log-step">EIGENVALUE COMPUTATION (3×3)</strong>');
-    log('<strong class="log-step">═══════════════════════════════════════</strong>');
-    log('');
-    log('⚠️ For 3×3 matrices, eigenvalue computation requires solving cubic equations.');
-    log('Exact symbolic solution of cubics is complex. Please use 2×2 matrices for');
-    log('full step-by-step exact rational arithmetic demonstrations.');
-    log('');
-    log('For 3×3 matrices, consider using numerical methods or computer algebra systems.');
-    eigenvalues = [];
+  } else if (N === 3){
+    eigenvalues = computeEigenvalues3x3(A);
   }
   
   if (eigenvalues.length > 0){
     displayEigenvalues();
     document.getElementById('eigenCount').textContent = eigenvalues.length;
-    setNarr(`✅ Found ${eigenvalues.length} eigenvalues. Click "Step 2" to find eigenvectors.`);
+    setNarr(`✅ Found ${eigenvalues.length} eigenvalue(s). Click "Step 2" to find eigenvectors.`);
   } else {
-    setNarr('⚠️ Use 2×2 matrix for complete step-by-step demonstration.');
+    setNarr('⚠️ Could not find eigenvalues. Try using preset matrices or matrices with integer eigenvalues.');
   }
 }
 
